@@ -1,5 +1,5 @@
 %define version 2.2.13
-%define release %mkrel 0.1
+%define release %mkrel 1
 
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
@@ -73,6 +73,7 @@ Requires(pre):	apache-modules = %{version}-%{release}
 Requires:	apache-conf >= %{version}
 Requires:	apache-base = %{version}-%{release}
 Requires:	apache-modules = %{version}-%{release}
+Requires:	apache-mod_rsbac
 Provides:	webserver
 Provides:	apache = %{version}-%{release}
 Provides:	apache-mpm = %{version}-%{release}
