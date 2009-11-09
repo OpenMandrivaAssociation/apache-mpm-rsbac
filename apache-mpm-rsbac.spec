@@ -1,11 +1,10 @@
 %define version 2.2.14
-%define subrel 1
-%define release %mkrel 1
+%define release %mkrel 2
  
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
 
-%define build_test 1
+%define build_test 0
 
 # commandline overrides:
 # rpm -ba|--rebuild --with 'xxx'
