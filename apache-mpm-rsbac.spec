@@ -1,5 +1,5 @@
 %define version 2.2.17
-%define release %mkrel 0.0.pre.2
+%define release %mkrel 3
  
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
@@ -130,7 +130,7 @@ cp %{PATCH1} httpd-%{version}-rsbac.patch
 #
 export WANT_AUTOCONF_2_5="1"
 
-CFLAGS="$RPM_OPT_FLAGS"
+CFLAGS="`echo $RPM_OPT_FLAGS |sed -e 's/-fomit-frame-pointer//'`"
 CPPFLAGS="-DSSL_EXPERIMENTAL_ENGINE -DLDAP_DEPRECATED -DHAVE_APR_MEMCACHE"
 if pkg-config openssl; then
     # configure -C barfs with trailing spaces in CFLAGS
