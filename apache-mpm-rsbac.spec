@@ -1,5 +1,5 @@
 %define version 2.2.17
-%define release %mkrel 3
+%define release %mkrel 4
  
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
@@ -42,7 +42,7 @@ BuildRequires:	pkgconfig
 BuildRequires:	rsbac-devel
 BuildRequires:	zlib-devel
 BuildRequires:	autoconf2.5
-BuildRequires:	automake1.7
+BuildRequires:	automake
 BuildRequires:	lynx
 BuildRequires:	libcap-devel
 %if %{build_test}
