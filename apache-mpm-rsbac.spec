@@ -1,5 +1,5 @@
 %define version 2.2.17
-%define release %mkrel 4
+%define release %mkrel 6
  
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
@@ -29,7 +29,7 @@ BuildRequires:	apr-devel >= 1:1.3.0
 BuildRequires:	apr-util-devel >= 1.3.0
 BuildRequires:	distcache-devel
 BuildRequires:	byacc
-BuildRequires:	db4-devel
+BuildRequires:	db-devel
 BuildRequires:	expat-devel
 BuildRequires:	gdbm-devel
 BuildRequires:	libsasl-devel
@@ -60,9 +60,6 @@ BuildRequires:	perl-Crypt-SSLeay
 BuildRequires:	perl-XML-DOM
 BuildRequires:	perl-XML-Parser
 BuildRequires:	openssl
-%endif
-%if %mdkversion >= 1020
-BuildRequires:	multiarch-utils >= 1.0.3
 %endif
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-buildroot
 Requires(pre): rpm-helper
