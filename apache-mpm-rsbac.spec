@@ -1,5 +1,5 @@
 %define version 2.2.17
-%define release %mkrel 6
+%define release %mkrel 7
  
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
