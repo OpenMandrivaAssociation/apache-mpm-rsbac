@@ -1,4 +1,4 @@
-%define version 2.2.18
+%define version 2.2.19
 %define release %mkrel 1
  
 %define defaultmaxmodules 128
