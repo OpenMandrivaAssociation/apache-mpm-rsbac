@@ -181,7 +181,7 @@ for mpm in rsbac; do
     fi
 
     #Copy configure flags to a file in the apache-source rpm.
-    #cp config.nice $RPM_BUILD_DIR/tmp-httpd-%{version}%{_usrsrc}/apache-%{version}/config.nice.${mpm}
+    #cp config.nice %{_builddir}/tmp-httpd-%{version}%{_usrsrc}/apache-%{version}/config.nice.${mpm}
 
     # tag it with the mpm name too so that we can track this somehow at for example netcraft...
     MPM_NAME=`echo ${mpm}|tr "[a-z]" "[A-Z]"`
