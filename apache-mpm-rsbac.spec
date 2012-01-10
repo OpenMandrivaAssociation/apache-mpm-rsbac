@@ -1,6 +1,3 @@
-%define version 2.2.19
-%define release %mkrel 1
- 
 %define defaultmaxmodules 128
 %define defaultserverlimit 1024
 
@@ -16,8 +13,8 @@
 
 Summary:	Implements a non-threaded, pre-forking web server with RSABC patch (stable)
 Name:		apache-mpm-rsbac
-Version:	%{version}
-Release:	%{release}
+Version:	2.2.21
+Release:	%mkrel 5
 Group:		System/Servers
 License:	Apache License
 URL:		http://www.apache.org
