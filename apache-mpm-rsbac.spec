@@ -14,7 +14,7 @@
 Summary:	Implements a non-threaded, pre-forking web server with RSABC patch (stable)
 Name:		apache-mpm-rsbac
 Version:	2.2.22
-Release:	%mkrel 1
+Release:	%mkrel 4
 Group:		System/Servers
 License:	Apache License
 URL:		http://www.apache.org
