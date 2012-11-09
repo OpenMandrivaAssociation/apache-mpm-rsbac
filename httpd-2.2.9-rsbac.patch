@@ -1,0 +1,240 @@
+--- httpd-2.2.12.orig/configure.in	2009-08-07 15:07:02.000000000 +0200
++++ httpd-2.2.12/configure.in	2009-08-07 15:08:00.000000000 +0200
+@@ -611,6 +611,12 @@
+ APACHE_HELP_STRING(--with-suexec-umask,umask for suexec'd process),[
+   AC_DEFINE_UNQUOTED(AP_SUEXEC_UMASK, 0$withval, [umask for suexec'd process] ) ] )
+ 
++AC_ARG_WITH(rsbac,
++APACHE_HELP_STRING(--with-rsbac,enable rsbac prefork role switch support),[
++  AC_DEFINE_UNQUOTED(AP_ENABLE_RSBAC, $withval, [enable rsbac prefork role switch support])
++  APR_ADDTO(LIBS, [-lrsbac])
++] )
++
+ dnl APR should go after the other libs, so the right symbols can be picked up
+ apulinklibs="`$apu_config --avoid-ldap --link-ld`" \
+  || apulinklibs="`$apu_config --link-libtool`"
+diff -urpN httpd-2.2.4/include/ap_config_auto.h.in httpd-2.2.4-rsbac/include/ap_config_auto.h.in
+--- httpd-2.2.4/include/ap_config_auto.h.in	2007-01-06 07:39:57.000000000 +0100
++++ httpd-2.2.4-rsbac/include/ap_config_auto.h.in	2007-04-18 13:40:30.000000000 +0200
+@@ -9,6 +9,9 @@
+ /* Allow modules to run hook after a fatal exception */
+ #undef AP_ENABLE_EXCEPTION_HOOK
+
++/* enable rsbac prefork role switch support */
++#undef AP_ENABLE_RSBAC
++
+ /* Allow IPv4 connections on IPv6 listening sockets */
+ #undef AP_ENABLE_V4_MAPPED
+
+diff -urpN httpd-2.2.9/server/mpm/prefork/prefork.c httpd-2.2.9-rsbac/server/mpm/prefork/prefork.c
+--- httpd-2.2.9/server/mpm/prefork/prefork.c	2009-06-13 12:08:38.000000000 +0200
++++ httpd-2.2.9-rsbac/server/mpm/prefork/prefork.c	2009-06-14 14:58:36.000000000 +0200
+@@ -49,6 +49,18 @@
+ #include "ap_mmn.h"
+ #include "apr_poll.h"
+
++#ifdef AP_ENABLE_RSBAC
++#include <rsbac/types.h>
++#include <rsbac/rc_data_structures.h>
++#include <rsbac/getname.h>
++#include <rsbac/rc_getname.h>
++#include <rsbac/rc_types.h>
++#include <rsbac/syscalls.h>
++#include <rsbac/error.h>
++#include <rsbac/cap_getname.h>
++#include <rsbac/helpers.h>
++#endif
++
+ #ifdef HAVE_BSTRING_H
+ #include <bstring.h>            /* for IRIX, FD_SET calls bzero() */
+ #endif
+@@ -88,6 +100,12 @@
+ #define HARD_THREAD_LIMIT 1
+ #endif
+
++#ifdef AP_ENABLE_RSBAC
++#ifndef MAX_ROLE_NUMBER
++#define MAX_ROLE_NUMBER 999999
++#endif
++#endif
++
+ /* config globals */
+
+ int ap_threads_per_child=0;         /* Worker threads per child */
+@@ -102,6 +120,10 @@
+ static int mpm_state = AP_MPMQ_STARTING;
+ static ap_pod_t *pod;
+
++#ifdef AP_ENABLE_RSBAC
++static unsigned int worker_role = 0;
++#endif
++
+ /*
+  * The max child slot ever assigned, preserved across restarts.  Necessary
+  * to deal with MaxClients changes across AP_SIG_GRACEFUL restarts.  We
+@@ -474,6 +496,11 @@
+     ap_sb_handle_t *sbh;
+     apr_bucket_alloc_t *bucket_alloc;
+     int last_poll_idx = 0;
++#ifdef AP_ENABLE_RSBAC
++    union rsbac_attribute_value_t role_value;
++    rsbac_rc_role_id_t current_role;
++    int sleep_count = 0;
++#endif
+
+     mpm_state = AP_MPMQ_STARTING; /* for benefit of any hooks that run as this
+                                    * child initializes
+@@ -553,6 +580,22 @@
+
+         (void) ap_update_child_status(sbh, SERVER_READY, (request_rec *) NULL);
+
++#ifdef AP_ENABLE_RSBAC
++	/* Make sure that we already have the worker role */
++#define MAX_MAINT_WAIT 20
++	sleep_count = 0;
++	while (!die_now && !shutdown_pending && (rsbac_rc_get_current_role(&current_role) || current_role != worker_role)) {
++		if (sleep_count > MAX_MAINT_WAIT) {
++    			ap_log_error(APLOG_MARK, APLOG_ERR, 0, ap_server_conf, "child has not been reset to worker role, current_role: %u, worker_role: %u. Exiting child now.", current_role, worker_role);
++			clean_child_exit(0);
++			return;
++		}
++		sleep_count++;
++		usleep(500000);
++    		ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ap_server_conf, "child not yet reset to worker role, current_role: %u, worker_role: %u", current_role, worker_role);
++	}
++#endif
++
+         /*
+          * Wait for an acceptable connection to arrive.
+          */
+@@ -664,6 +707,10 @@
+ static int make_child(server_rec *s, int slot)
+ {
+     int pid;
++#ifdef AP_ENABLE_RSBAC
++    union rsbac_attribute_value_t role_value;
++    union rsbac_target_id_t tid;
++#endif
+
+     if (slot + 1 > ap_max_daemons_limit) {
+         ap_max_daemons_limit = slot + 1;
+@@ -710,6 +757,22 @@
+         return -1;
+     }
+
++#ifdef AP_ENABLE_RSBAC
++    /* Make sure we are now running this child as worker_role */
++    if (pid != 0) {
++	    tid.process = pid;
++	    role_value.dummy = worker_role;
++	    if (rsbac_set_attr(0, SW_RC, T_PROCESS, &tid, A_rc_role,
++				    &role_value) < 0)
++		    ap_log_error(APLOG_MARK, APLOG_ERR, 0, ap_server_conf,
++				    "Couldn't set the RSBAC worker_role %lu to the new children.", worker_role);
++	    else
++		    ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
++				    ap_server_conf, "PID: %lu set to worker_role: %lu",
++				    tid.process, role_value.dummy);
++    }
++#endif
++
+     if (!pid) {
+ #ifdef HAVE_BINDPROCESSOR
+         /* by default AIX binds to a single processor
+@@ -792,12 +855,47 @@
+
+     for (i = 0; i < ap_daemons_limit; ++i) {
+         int status;
++#ifdef AP_ENABLE_RSBAC
++	union rsbac_attribute_value_t role_value;
++	union rsbac_target_id_t tid;
++	unsigned int old_role;
++#endif
+
+         if (i >= ap_max_daemons_limit && free_length == idle_spawn_rate)
+             break;
+         ws = &ap_scoreboard_image->servers[i][0];
+         status = ws->status;
+-        if (status == SERVER_DEAD) {
++#ifdef AP_ENABLE_RSBAC
++	/* If it's work has been completed,
++	 * Reset the children to the worker_role
++	 * (we take care about SERVER_READY children
++	 * and KEEPALIVE children)
++	 */
++	if (status == SERVER_READY || status == SERVER_BUSY_KEEPALIVE) {
++		tid.process = ap_scoreboard_image->parent[i].pid;
++		if (tid.process != 0)
++			if (rsbac_get_attr(0, SW_RC, T_PROCESS, &tid, A_rc_role, &role_value, FALSE) >= 0) {
++				if (role_value.rc_role != worker_role) {
++					old_role = role_value.rc_role;
++					role_value.rc_role = worker_role;
++    					ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ap_server_conf, "perform_idle_server_maintenance() PID: %lu trying to set worker_role: %lu", tid.process, role_value.rc_role);
++
++					if (rsbac_set_attr(0, SW_RC, T_PROCESS, &tid,
++								A_rc_role, &role_value) < 0)
++						ap_log_error(APLOG_MARK, APLOG_ERR, 0, ap_server_conf,
++							"Couldn't set the RSBAC worker_role %lu to the new children.",
++							worker_role);
++					else
++						ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
++							ap_server_conf,
++							"PID: %lu reset to worker_role: %lu was role %lu",
++							tid.process, role_value.dummy, old_role);
++				}
++			} else
++    				ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ap_server_conf, "perform_idle_server_maintenance() FAILURE - PROCESS NOT FOUND? PID: %lu trying to set worker_role: %lu", tid.process, role_value.dummy);
++	}
++#endif
++       if (status == SERVER_DEAD) {
+             /* try to keep children numbers as low as possible */
+             if (free_length < idle_spawn_rate) {
+                 free_slots[free_length] = i;
+@@ -1449,6 +1547,36 @@
+     return NULL;
+ }
+
++#ifdef AP_ENABLE_RSBAC
++static const char *set_worker_role (cmd_parms *cmd, void *dummy, const char *arg)
++{
++	int temp_value;
++	const char *err = ap_check_cmd_context(cmd, GLOBAL_ONLY);
++
++	if (err != NULL){
++		return err;
++	}
++
++	temp_value = atoi(arg);
++	if (temp_value < 0 ){
++		ap_log_error(APLOG_MARK, APLOG_STARTUP, 0, NULL,
++				"WARNING: Require WorkerRole >= 0, using default: %u",
++				worker_role);
++		/* default is already set to 0 so just return */
++		return NULL;
++	}
++	if (temp_value >= MAX_ROLE_NUMBER){
++		ap_log_error(APLOG_MARK, APLOG_STARTUP, 0, NULL,
++				"WARNING: Require WorkerRole <= %d, using default: %u",
++				MAX_ROLE_NUMBER, worker_role);
++		/* default is already set to 0 so just return */
++		return NULL;
++	}
++	worker_role = temp_value;
++	return NULL;
++}
++#endif
++
+ static const command_rec prefork_cmds[] = {
+ UNIX_DAEMON_COMMANDS,
+ LISTEN_COMMANDS,
+@@ -1462,6 +1590,10 @@
+               "Maximum number of children alive at the same time"),
+ AP_INIT_TAKE1("ServerLimit", set_server_limit, NULL, RSRC_CONF,
+               "Maximum value of MaxClients for this run of Apache"),
++#ifdef AP_ENABLE_RSBAC
++AP_INIT_TAKE1("WorkerRole", set_worker_role, NULL, RSRC_CONF,
++              "Default worker role assigned to children (need to exist in RSBAC)"),
++#endif
+ AP_GRACEFUL_SHUTDOWN_TIMEOUT_COMMAND,
+ { NULL }
+ };
