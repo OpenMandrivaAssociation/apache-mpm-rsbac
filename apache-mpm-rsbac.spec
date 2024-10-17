@@ -17,7 +17,7 @@ Version:	2.2.22
 Release:	%mkrel 4
 Group:		System/Servers
 License:	Apache License
-URL:		http://www.apache.org
+URL:		https://www.apache.org
 # http://svn.rsbac.org/?do=browse&project=rsbac-apache&path=%2Fmod_rsbac%2Fapache%2Brsbac%2F
 Patch1:		httpd-2.2.9-rsbac.patch
 BuildRequires:	apache-source = %{version}-%{release}
